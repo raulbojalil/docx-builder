@@ -1,0 +1,25 @@
+{
+  "name": "docx-builder",
+  "version": "1.0.3",
+  "description": "Easily create DOCX files from Node.js",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raulbojalil/docx-builder.git"
+  },
+  "keywords": [
+    "docx", "composition", "document", "office", "microsoft office", "microsoft word"
+  ],
+  "author": "Raúl Alberto Bojalil Becerra <me@raulbojalil.com>",
+  "dependencies": {
+    "docxtemplater": "3.0.11",
+	"jszip" : "2.6.1"
+  },
+  "bugs": {
+    "url": "https://github.com/raulbojalil/docx-builder/issues"
+  },
+  "homepage": "https://github.com/raulbojalil/docx-builder#readme"
+}
