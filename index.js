@@ -176,6 +176,7 @@ exports.Document = function() {
 	    var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
 		xml = xml.substring(xml.indexOf("<w:body>") + 8);
         xml = xml.substring(0, xml.indexOf("</w:body>"));
+		xml = xml.substring(0, xml.indexOf("<w:sectPr"));
 		this.insertRaw(xml);
 	}
 	
@@ -190,6 +191,7 @@ exports.Document = function() {
 			var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
 			xml = xml.substring(xml.indexOf("<w:body>") + 8);
 			xml = xml.substring(0, xml.indexOf("</w:body>"));
+			xml = xml.substring(0, xml.indexOf("<w:sectPr"));
 			this.insertRaw(xml);
 			callback(null);
 		  }

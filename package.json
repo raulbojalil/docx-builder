@@ -1,7 +1,7 @@
 {
   "name": "docx-builder",
-  "version": "1.0.3",
-  "description": "Easily create DOCX files from Node.js",
+  "version": "1.0.4",
+  "description": "Easily create or merge DOCX files from Node.js",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
