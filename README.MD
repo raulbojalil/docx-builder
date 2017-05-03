@@ -10,7 +10,7 @@ Using [npm](https://www.npmjs.com/) do:
 npm install docx-builder
 ```
 
-View in [npm] (https://www.npmjs.com/package/docx-builder)
+View in [npm](https://www.npmjs.com/package/docx-builder)
 
 # Example
 
