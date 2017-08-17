@@ -1,6 +1,6 @@
 {
   "name": "docx-builder",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Easily create or merge DOCX files from Node.js",
   "main": "index.js",
   "scripts": {

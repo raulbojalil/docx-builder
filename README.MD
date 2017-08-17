@@ -85,7 +85,8 @@ A common requirement is to merge two or more .docx files into one. For that, jus
 var builder = require('docx-builder');
 var docx = new builder.Document();
 
-docx.insertDocxSync(__dirname+"/test1.docx");
+//You can also do this asynchronously using the insertDocx method.
+docx.insertDocxSync(__dirname+"/test1.docx"); 
 docx.insertDocxSync(__dirname+"/test2.docx");
 docx.insertDocxSync(__dirname+"/test3.docx");
 

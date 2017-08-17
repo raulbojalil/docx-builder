@@ -170,13 +170,78 @@ exports.Document = function() {
 		this._builder.push(xml);
 	}
 	
-	this.insertDocxSync = function(path){
-		
-		var zip = new JSZip(fs.readFileSync(path,"binary"));
+	this.mediaFiles = [];
+	
+	this.getExternalDocxRawXml = function(docxData)
+	{
+		var zip = new JSZip(docxData);
 	    var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
+		
+		var mediaFolderName = "word/media";
+		var mediaFolder = zip.folder(mediaFolderName);
+		
+		var relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+		
+		for(var file in mediaFolder.files)
+		{
+			if(file.startsWith("word/media") && file != "word/media/")
+			{
+				var oldRId = "";
+				var newRId = "";
+				var rType = "";
+				var newFile = file;
+		
+				var indexOfOldRel = relsXml.indexOf(file.substr(5));
+		        if(indexOfOldRel != -1)
+				{
+					var left = indexOfOldRel;
+					var right = indexOfOldRel;
+					
+					while(left > 0) { left--; if(relsXml[left] == '<') break; }
+					while(right < relsXml.length) { right++; if(relsXml[right] == '>') break; }
+					
+					var relTag = relsXml.substr(left);
+					relTag = relTag.substr(0,right-left+1).split(' ');
+					
+					for(var i=0; i < relTag.length; i++)
+					{
+						var item = relTag[i];
+						if(item.startsWith('Id="'))
+						{
+							oldRId = item.substr(4);
+							oldRId = oldRId.substr(0, oldRId.length - 1);
+						}
+						else if(item.startsWith('Type="'))
+						{
+							rType = item.substr(6);		
+							rType = rType.substr(0, rType.length - 1);
+						}							
+					}
+										
+					var hrTime = process.hrtime();
+					var newId = hrTime[0] + "" + hrTime[1];
+					newRId = "rId" + newId;
+					
+					var fileExt = "." + newFile.split('.').pop();
+					newFile = newFile.substr(0, newFile.length - fileExt.length) + newId + fileExt;
+					
+					xml = xml.replace("\"" + oldRId  + "\"", "\"" + newRId  + "\"");
+					this.mediaFiles.push({ name: newFile, data: mediaFolder.files[file]._data, rId: newRId, rType: rType });
+					
+				}
+			}
+		}
+
 		xml = xml.substring(xml.indexOf("<w:body>") + 8);
         xml = xml.substring(0, xml.indexOf("</w:body>"));
 		xml = xml.substring(0, xml.indexOf("<w:sectPr"));
+		
+		return xml;
+	}
+	
+	this.insertDocxSync = function(path){
+		
+		var xml = this.getExternalDocxRawXml(fs.readFileSync(path,"binary"));
 		this.insertRaw(xml);
 	}
 	
@@ -186,12 +251,7 @@ exports.Document = function() {
 		  if (e) callback(e);
 		  else
 		  {
-			  
-			var zip = new JSZip(data);
-			var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
-			xml = xml.substring(xml.indexOf("<w:body>") + 8);
-			xml = xml.substring(0, xml.indexOf("</w:body>"));
-			xml = xml.substring(0, xml.indexOf("<w:sectPr"));
+			var xml = this.getExternalDocxRawXml(data);
 			this.insertRaw(xml);
 			callback(null);
 		  }
@@ -202,14 +262,35 @@ exports.Document = function() {
 		
 		var template = fs.readFileSync(__dirname + "/template.docx","binary");
 		var zip = new JSZip(template);
-	
+		
+		var relsXml = "";
+		
+		if(this.mediaFiles.length > 0)
+		{
+			relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+			
+			for(var i=0; i < this.mediaFiles.length; i++)
+			{
+				var mediaFile = this.mediaFiles[i];
+				zip.file(mediaFile.name, mediaFile.data);
+			    relsXml = relsXml.replace('</Relationships>', '<Relationship Id="' + mediaFile.rId + '" Type="' + mediaFile.rType + '" Target="' + mediaFile.name.substr(5) + '"/></Relationships>');
+			}
+			
+			zip.file("word/_rels/document.xml.rels", relsXml);
+		}
+		
+	    //zip.file("word/media/image1.png", algo._data);
+		
 		var doc = new Docxtemplater().loadZip(zip);
 
 		doc.setData({body: this._body.join(''), header: this._header.join(''), footer: this._footer.join('') });
 		doc.render();
-
+		
 		var buf = doc.getZip().generate({type:"nodebuffer"});
 		fs.writeFile(filepath,buf, err);
+		
+		
+		
 	}
 }
 
