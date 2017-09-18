@@ -171,11 +171,19 @@ exports.Document = function() {
 	}
 	
 	this.mediaFiles = [];
+	this.styles = [];
 	
 	this.getExternalDocxRawXml = function(docxData)
 	{
 		var zip = new JSZip(docxData);
 	    var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
+		var stylesXml = Utf8ArrayToString(zip.file("word/styles.xml")._data.getContent());
+		
+		stylesXml = stylesXml.substring(stylesXml.indexOf("<w:styles"));
+		stylesXml = stylesXml.substring(stylesXml.indexOf(">") + 1);
+		stylesXml = stylesXml.substring(0, stylesXml.indexOf("</w:styles>"));
+		
+		this.styles.push(stylesXml);
 		
 		var mediaFolderName = "word/media";
 		var mediaFolder = zip.folder(mediaFolderName);
@@ -262,12 +270,11 @@ exports.Document = function() {
 		
 		var template = fs.readFileSync(__dirname + "/template.docx","binary");
 		var zip = new JSZip(template);
-		
-		var relsXml = "";
+
 		
 		if(this.mediaFiles.length > 0)
 		{
-			relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+			var relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
 			
 			for(var i=0; i < this.mediaFiles.length; i++)
 			{
@@ -278,6 +285,13 @@ exports.Document = function() {
 			
 			zip.file("word/_rels/document.xml.rels", relsXml);
 		}
+		
+		if(this.styles.length > 0)
+		{
+			var stylesXml = Utf8ArrayToString(zip.file("word/styles.xml")._data.getContent()).replace("</w:styles>", "");
+			zip.file("word/styles.xml", stylesXml + this.styles.join("") + "</w:styles>");
+		}
+		
 		
 	    //zip.file("word/media/image1.png", algo._data);
 		
