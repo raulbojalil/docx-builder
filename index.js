@@ -2,6 +2,19 @@ var fs = require('fs');
 var Docxtemplater = require('docxtemplater');
 var JSZip = require('jszip');
 
+var systemXmlRelIds = 
+{	
+	"styles.xml" : "rId1",
+	"settings.xml" : "rId2",
+	"webSettings.xml" : "rId3",
+	"footnotes.xml" : "rId4",
+	"endnotes.xml" : "rId5",
+	"header1.xml" : "rId6",
+	"footer1.xml" : "rId7",
+	"fontTable.xml" : "rId8",
+	"theme1.xml" : "rId9"
+}
+
 exports.Document = function() {
 	
 	this._body = [];
@@ -170,79 +183,128 @@ exports.Document = function() {
 		this._builder.push(xml);
 	}
 	
-	this.mediaFiles = [];
-	this.styles = [];
+	this._replaceRIds = function(xml, replacements)
+	{
+		var xmlBuilder = [];
+	    var startingIndex = 0;
+		for(var i=0; i < xml.length; i++)
+		{
+		    if(xml[i] == '"' && xml[i+1] == 'r' && xml[i+2] == 'I' && xml[i+3] == 'd')
+		    {
+				var oldRId = ["rId"];
+				i = i+4;
+				while(xml[i] != "\"")
+				{
+					oldRId.push(xml[i]);
+				    i++;
+				}
+			   
+				oldRId = oldRId.join("");
+				var newRId = replacements[oldRId] || oldRId;
+			   
+				xmlBuilder.push('"');
+				xmlBuilder.push(newRId);
+				xmlBuilder.push('"');
+			   
+			}
+			else 
+				xmlBuilder.push(xml[i]);
+	    }
+	   
+		return xmlBuilder.join("");
+	}
+	
+	this._utf8ArrayToString = function(array) {
+		var out, i, len, c;
+		var char2, char3;
+
+		out = "";
+		len = array.length;
+		i = 0;
+		while(i < len) {
+		c = array[i++];
+		switch(c >> 4)
+		{ 
+		  case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+			// 0xxxxxxx
+			out += String.fromCharCode(c);
+			break;
+		  case 12: case 13:
+			// 110x xxxx   10xx xxxx
+			char2 = array[i++];
+			out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
+			break;
+		  case 14:
+			// 1110 xxxx  10xx xxxx  10xx xxxx
+			char2 = array[i++];
+			char3 = array[i++];
+			out += String.fromCharCode(((c & 0x0F) << 12) |
+						   ((char2 & 0x3F) << 6) |
+						   ((char3 & 0x3F) << 0));
+			break;
+		}
+		}
+
+		return out;
+	}
+	
+	this.rels = [];
 	
 	this.getExternalDocxRawXml = function(docxData)
 	{
 		var zip = new JSZip(docxData);
-	    var xml = Utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
-		var stylesXml = Utf8ArrayToString(zip.file("word/styles.xml")._data.getContent());
-		
-		stylesXml = stylesXml.substring(stylesXml.indexOf("<w:styles"));
-		stylesXml = stylesXml.substring(stylesXml.indexOf(">") + 1);
-		stylesXml = stylesXml.substring(0, stylesXml.indexOf("</w:styles>"));
-		
-		this.styles.push(stylesXml);
-		
-		var mediaFolderName = "word/media";
-		var mediaFolder = zip.folder(mediaFolderName);
-		
-		var relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
-		
-		for(var file in mediaFolder.files)
-		{
-			if(file.startsWith("word/media") && file != "word/media/")
-			{
-				var oldRId = "";
-				var newRId = "";
-				var rType = "";
-				var newFile = file;
-		
-				var indexOfOldRel = relsXml.indexOf(file.substr(5));
-		        if(indexOfOldRel != -1)
-				{
-					var left = indexOfOldRel;
-					var right = indexOfOldRel;
-					
-					while(left > 0) { left--; if(relsXml[left] == '<') break; }
-					while(right < relsXml.length) { right++; if(relsXml[right] == '>') break; }
-					
-					var relTag = relsXml.substr(left);
-					relTag = relTag.substr(0,right-left+1).split(' ');
-					
-					for(var i=0; i < relTag.length; i++)
-					{
-						var item = relTag[i];
-						if(item.startsWith('Id="'))
-						{
-							oldRId = item.substr(4);
-							oldRId = oldRId.substr(0, oldRId.length - 1);
-						}
-						else if(item.startsWith('Type="'))
-						{
-							rType = item.substr(6);		
-							rType = rType.substr(0, rType.length - 1);
-						}							
-					}
-										
-					var hrTime = process.hrtime();
-					var newId = hrTime[0] + "" + hrTime[1];
-					newRId = "rId" + newId;
-					
-					var fileExt = "." + newFile.split('.').pop();
-					newFile = newFile.substr(0, newFile.length - fileExt.length) + newId + fileExt;
-					
-					xml = xml.replace("\"" + oldRId  + "\"", "\"" + newRId  + "\"");
-					this.mediaFiles.push({ name: newFile, data: mediaFolder.files[file]._data, rId: newRId, rType: rType });
-					
-				}
-			}
-		}
-
+	    
+		var xml = this._utf8ArrayToString(zip.file("word/document.xml")._data.getContent());
 		xml = xml.substring(xml.indexOf("<w:body>") + 8);
         xml = xml.substring(0, xml.indexOf("</w:body>"));
-		xml = xml.substring(0, xml.indexOf("<w:sectPr"));
+		
+		var relsXml = this._utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+	    var replacements = null;
+		
+		while(relsXml.indexOf("<Relationship") != -1)
+		{
+			relsXml = relsXml.substring(relsXml.indexOf("<Relationship") + 13);
+			relsXml = relsXml.substring(relsXml.indexOf("Id=\"") + 4);
+			var id = relsXml.substring(0, relsXml.indexOf("\""));
+			relsXml = relsXml.substring(relsXml.indexOf("Type=\"") + 6);
+			var type = relsXml.substring(0, relsXml.indexOf("\""));
+			relsXml = relsXml.substring(relsXml.indexOf("Target=\"") + 8);
+			var target = relsXml.substring(0, relsXml.indexOf("\""));
+			
+			var filename = target.indexOf("/") != -1 ? target.substring(target.lastIndexOf("/")+1) : target;
+			var zipPath = target.startsWith("../") ? target.substring(3) : ("word/" + target);
+
+			var newId = systemXmlRelIds[filename];
+			var newTarget = target;
+			
+			if(!newId)
+			{
+				var hrtime = process.hrtime();
+				var rand = hrtime[0] + "" + hrtime[1];
+				newId = id + "_" + rand;
+				newTarget = target.split('/');
+				newTarget[newTarget.length-1] = rand + "_" + newTarget[newTarget.length-1]; 
+				newTarget = newTarget.join('/');
+			}
+
+			this.rels.push({ 
+				id: id, 
+				newId: newId,
+				data: zip.file(zipPath)._data.getContent(), 
+				zipPath: zipPath,
+				filename: filename,
+				type: type, 
+				target: target, 
+				newTarget: newTarget
+			}); 
+			
+			replacements = replacements || {};
+			replacements[id] = newId;
+		}
+	
+		
+		if(replacements)
+			xml = this._replaceRIds(xml, replacements);
 		
 		return xml;
 	}
@@ -270,30 +332,58 @@ exports.Document = function() {
 		
 		var template = fs.readFileSync(__dirname + "/template.docx","binary");
 		var zip = new JSZip(template);
-
+		var filesToSave = {};
 		
-		if(this.mediaFiles.length > 0)
+		if(this.rels.length > 0)
 		{
-			var relsXml = Utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+			var relsXmlBuilder = [];
 			
-			for(var i=0; i < this.mediaFiles.length; i++)
+			for(var i=0; i < this.rels.length; i++)
 			{
-				var mediaFile = this.mediaFiles[i];
-				zip.file(mediaFile.name, mediaFile.data);
-			    relsXml = relsXml.replace('</Relationships>', '<Relationship Id="' + mediaFile.rId + '" Type="' + mediaFile.rType + '" Target="' + mediaFile.name.substr(5) + '"/></Relationships>');
+				var rel = this.rels[i];
+				var saveTo = rel.newTarget.startsWith("../") ? rel.newTarget.substring(3) : ("word/" + rel.newTarget);
+				
+				if(rel.target != rel.newTarget)
+				{
+					zip.file(saveTo, rel.data);
+					relsXmlBuilder.push('<Relationship Id="' + rel.newId + '" Type="' + rel.type + '" Target="' + rel.newTarget + '"/>');
+				}
+				else if(rel.filename.endsWith(".xml")) 
+				{
+					var zipFile = zip.file(rel.zipPath);
+					
+					if((filesToSave[saveTo] || zipFile) && !rel.target.startsWith('theme/'))
+					{
+						var xml = this._utf8ArrayToString(rel.data).substring(1);
+						xml = xml.substring(xml.indexOf("<"));
+						xml = xml.substring(xml.indexOf(">") + 1);
+						
+						var closingTag = xml.substring(xml.lastIndexOf("</"));
+						
+						var mergedXml = filesToSave[saveTo] || this._utf8ArrayToString(zipFile._data.getContent());
+						mergedXml = mergedXml.replace(closingTag, xml);
+						filesToSave[saveTo] = mergedXml;
+					}
+					else
+						filesToSave[saveTo] = this._utf8ArrayToString(rel.data);
+				}
+				else
+					console.log("Cannot merge file " + filename);
 			}
 			
-			zip.file("word/_rels/document.xml.rels", relsXml);
+			if(relsXmlBuilder.length > 0)
+			{
+				var relsXml = this._utf8ArrayToString(zip.file("word/_rels/document.xml.rels")._data.getContent());
+				relsXmlBuilder.push('</Relationships>');
+				relsXml = relsXml.replace('</Relationships>', relsXmlBuilder.join(''));
+				zip.file("word/_rels/document.xml.rels", relsXml);
+			}
+			
+			for(var path in filesToSave)
+			{
+				zip.file(path, filesToSave[path]);
+			}
 		}
-		
-		if(this.styles.length > 0)
-		{
-			var stylesXml = Utf8ArrayToString(zip.file("word/styles.xml")._data.getContent()).replace("</w:styles>", "");
-			zip.file("word/styles.xml", stylesXml + this.styles.join("") + "</w:styles>");
-		}
-		
-		
-	    //zip.file("word/media/image1.png", algo._data);
 		
 		var doc = new Docxtemplater().loadZip(zip);
 
@@ -302,43 +392,5 @@ exports.Document = function() {
 		
 		var buf = doc.getZip().generate({type:"nodebuffer"});
 		fs.writeFile(filepath,buf, err);
-		
-		
-		
 	}
-}
-
-
-function Utf8ArrayToString(array) {
-    var out, i, len, c;
-    var char2, char3;
-
-    out = "";
-    len = array.length;
-    i = 0;
-    while(i < len) {
-    c = array[i++];
-    switch(c >> 4)
-    { 
-      case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
-        // 0xxxxxxx
-        out += String.fromCharCode(c);
-        break;
-      case 12: case 13:
-        // 110x xxxx   10xx xxxx
-        char2 = array[i++];
-        out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
-        break;
-      case 14:
-        // 1110 xxxx  10xx xxxx  10xx xxxx
-        char2 = array[i++];
-        char3 = array[i++];
-        out += String.fromCharCode(((c & 0x0F) << 12) |
-                       ((char2 & 0x3F) << 6) |
-                       ((char3 & 0x3F) << 0));
-        break;
-    }
-    }
-
-    return out;
 }
